@@ -279,12 +279,43 @@ export class ChannelDeletionService {
       // channelDir = inputDir (это корневая папка канала)
       // Структура: STORAGE_ROOT/userSlug/channelSlug/
       const channelDir = paths.inputDir;
+      const resolvedChannelDir = path.resolve(channelDir);
+      const resolvedUserDir = path.resolve(paths.userDir);
+      const resolvedRoot = path.resolve(paths.rootDir);
 
       Logger.info("ChannelDeletionService: Starting storage deletion", {
         channelId,
         channelName,
-        channelDir
+        channelDir,
+        resolvedChannelDir,
+        resolvedUserDir,
+        resolvedRoot
       });
+
+      // ЗАЩИТА ОТ PATH TRAVERSAL: Проверяем что channelDir находится внутри userDir
+      if (!resolvedChannelDir.startsWith(resolvedUserDir + path.sep) && resolvedChannelDir !== resolvedUserDir) {
+        Logger.error("ChannelDeletionService: Path traversal attempt detected", {
+          channelId,
+          channelName,
+          channelDir,
+          resolvedChannelDir,
+          resolvedUserDir,
+          resolvedRoot
+        });
+        throw new Error(`Security violation: Channel directory is outside user directory`);
+      }
+
+      // Дополнительная проверка: channelDir должен быть внутри STORAGE_ROOT
+      if (!resolvedChannelDir.startsWith(resolvedRoot + path.sep) && resolvedChannelDir !== resolvedRoot) {
+        Logger.error("ChannelDeletionService: Path traversal attempt detected (outside STORAGE_ROOT)", {
+          channelId,
+          channelName,
+          channelDir,
+          resolvedChannelDir,
+          resolvedRoot
+        });
+        throw new Error(`Security violation: Channel directory is outside STORAGE_ROOT`);
+      }
 
       // Проверяем существование папки
       try {

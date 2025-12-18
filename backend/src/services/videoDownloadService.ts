@@ -1280,11 +1280,28 @@ export async function downloadAndSaveToLocal(
 ): Promise<DownloadAndSaveToLocalResult> {
   const { channelId, userId, telegramMessageId, videoTitle, prompt } = options;
 
-  Logger.info("downloadAndSaveToLocal: start", {
+  // Определяем режим: автоматический (если есть prompt) или ручной
+  const mode = prompt ? "auto" : "manual";
+  const storageRoot = process.env.STORAGE_ROOT || "default (storage/videos)";
+
+  Logger.info(`downloadAndSaveToLocal [${mode}]: start`, {
+    mode,
     channelId,
     userId,
     telegramMessageId,
-    videoTitle: videoTitle || "not provided"
+    videoTitle: videoTitle || "not provided",
+    hasPrompt: !!prompt,
+    storageRoot,
+    timestamp: new Date().toISOString()
+  });
+
+  console.log(`DOWNLOAD_TO_LOCAL_${mode.toUpperCase()}_START:`, {
+    mode,
+    channelId,
+    userId,
+    telegramMessageId,
+    storageRoot,
+    timestamp: new Date().toISOString()
   });
 
   if (!SYNX_CHAT_ID) {
@@ -1462,28 +1479,54 @@ export async function downloadAndSaveToLocal(
 
       tempFilePath = downloadResult.tempPath;
 
-      Logger.info("downloadAndSaveToLocal: video downloaded successfully", {
+      Logger.info(`downloadAndSaveToLocal [${mode}]: video downloaded successfully from Telegram`, {
+        mode,
         channelId,
         userId,
         tempPath: tempFilePath,
         fileName: downloadResult.fileName,
-        messageId: downloadResult.messageId
+        messageId: downloadResult.messageId,
+        timestamp: new Date().toISOString()
       });
 
-      // Шаг 2: Сохраняем файл в локальное хранилище
-      Logger.info("downloadAndSaveToLocal: saving file to local storage", {
+      console.log(`VIDEO_DOWNLOADED_${mode.toUpperCase()}:`, {
+        mode,
         channelId,
         userId,
-        tempPath: tempFilePath
+        telegramMessageId,
+        fileName: downloadResult.fileName,
+        messageId: downloadResult.messageId,
+        timestamp: new Date().toISOString()
       });
 
-      // Получаем пути к хранилищу канала пользователя
+      // Шаг 2: Получаем пути к хранилищу канала пользователя
       const channelName = channelData.name || `channel_${channelId}`;
       const paths = getUserChannelStoragePaths({
         userId,
         userEmail,
         channelId,
         channelName
+      });
+
+      // Сохраняем файл в локальное хранилище
+      Logger.info(`downloadAndSaveToLocal [${mode}]: saving file to local storage`, {
+        mode,
+        channelId,
+        userId,
+        tempPath: tempFilePath,
+        storageRoot,
+        inputDir: paths.inputDir,
+        timestamp: new Date().toISOString()
+      });
+
+      console.log(`SAVING_TO_STORAGE_${mode.toUpperCase()}:`, {
+        mode,
+        channelId,
+        userId,
+        tempPath: tempFilePath,
+        storageRoot,
+        inputDir: paths.inputDir,
+        timestamp: new Date().toISOString()
       });
       
       // Создаём директории, если их нет
@@ -1521,14 +1564,28 @@ export async function downloadAndSaveToLocal(
         filePath
       });
 
-      Logger.info("downloadAndSaveToLocal: file saved to local storage", {
+      Logger.info(`downloadAndSaveToLocal [${mode}]: file saved to local storage successfully`, {
+        mode,
         channelId,
         userId,
         userEmail: paths.userEmail,
         userSlug: paths.userSlug,
         inputPath: filePath,
         filename: safeFileName,
-        channelSlug: paths.channelSlug
+        channelSlug: paths.channelSlug,
+        storageRoot,
+        timestamp: new Date().toISOString()
+      });
+
+      console.log(`FILE_SAVED_${mode.toUpperCase()}:`, {
+        mode,
+        channelId,
+        userId,
+        filePath,
+        filename: safeFileName,
+        storageRoot,
+        inputDir: paths.inputDir,
+        timestamp: new Date().toISOString()
       });
 
       // Шаг 3: Удаляем временный файл
@@ -1542,7 +1599,7 @@ export async function downloadAndSaveToLocal(
           localFilename: safeFileName,
           channelSlug: paths.channelSlug,
           createdAt: new Date(),
-          source: "manual",
+          source: mode === "auto" ? "schedule" : "manual", // Различаем автоматическое и ручное сохранение
           telegramMessageId: downloadResult.messageId,
           fileName: safeFileName
         });

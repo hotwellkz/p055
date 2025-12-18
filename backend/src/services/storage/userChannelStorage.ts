@@ -17,7 +17,7 @@ export interface UserChannelStoragePaths {
 
   rootDir: string;   // STORAGE_ROOT
   inputDir: string;  // STORAGE_ROOT/userSlug/channelSlug
-  archiveDir: string;// STORAGE_ROOT/userSlug/channelSlug/Загруженные - <channelName>
+  archiveDir: string;// STORAGE_ROOT/userSlug/channelSlug/uploaded
 }
 
 /**
@@ -67,7 +67,7 @@ function makeSafeChannelSlug(name: string, channelId: string): string {
  * Структура:
  * - userDir: ${STORAGE_ROOT}/${userSlug}/ - папка пользователя
  * - inputDir: ${STORAGE_ROOT}/${userSlug}/${channelSlug}/ - входящие файлы для автопубликации
- * - archiveDir: ${STORAGE_ROOT}/${userSlug}/${channelSlug}/Загруженные - ${channelName}/ - архив опубликованных файлов
+ * - archiveDir: ${STORAGE_ROOT}/${userSlug}/${channelSlug}/uploaded/ - архив опубликованных файлов
  * 
  * @param params - Параметры для получения путей
  * @returns Пути к хранилищу канала пользователя
@@ -87,7 +87,7 @@ export function getUserChannelStoragePaths(params: {
   const channelBaseDir = path.join(userDir, channelSlug);
 
   const inputDir = channelBaseDir; // сюда кладём новые видео
-  const archiveDir = path.join(channelBaseDir, `Загруженные - ${params.channelName}`);
+  const archiveDir = path.join(channelBaseDir, "uploaded"); // архив опубликованных файлов (ASCII имя для совместимости)
 
   return {
     userId: params.userId,

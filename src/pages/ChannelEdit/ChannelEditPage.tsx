@@ -25,6 +25,7 @@ import { IntegrationsStatusBlock } from "../../components/IntegrationsStatusBloc
 import { useIntegrationsStatus } from "../../hooks/useIntegrationsStatus";
 import { getUserSettings } from "../../api/userSettings";
 import { getBlotatoPublishStatus, type BlotatoPublishSettings } from "../../utils/blotatoStatus";
+import { computeChannelStoragePaths } from "../../utils/storagePaths";
 import { AlertCircle, CheckCircle2 } from "lucide-react";
 import { getAuthToken } from "../../utils/auth";
 
@@ -462,19 +463,8 @@ const ChannelEditPage = () => {
     }
 
     // Валидация настроек Blotato
+    // ПРИМЕЧАНИЕ: driveInputFolderId и driveArchiveFolderId больше не требуются - пути вычисляются автоматически
     if (channel.blotataEnabled) {
-      if (!channel.driveInputFolderId || channel.driveInputFolderId.trim() === "") {
-        const errorMsg = "Для автопубликации через Blotato необходимо указать ID входной папки на сервере";
-        setError(errorMsg);
-        showError(errorMsg, 6000);
-        return;
-      }
-      if (!channel.driveArchiveFolderId || channel.driveArchiveFolderId.trim() === "") {
-        const errorMsg = "Для автопубликации через Blotato необходимо указать ID архивной папки на сервере";
-        setError(errorMsg);
-        showError(errorMsg, 6000);
-        return;
-      }
       if (!channel.blotataApiKey || channel.blotataApiKey.trim() === "") {
         const errorMsg = "Для автопубликации через Blotato необходимо указать API ключ";
         setError(errorMsg);
@@ -1864,8 +1854,9 @@ const ChannelEditPage = () => {
             {(() => {
               const blotatoSettings: BlotatoPublishSettings = {
                 enabled: channel.blotataEnabled || false,
-                inputFolderId: channel.driveInputFolderId,
-                archiveFolderId: channel.driveArchiveFolderId,
+                // inputFolderId и archiveFolderId больше не используются - пути вычисляются автоматически
+                inputFolderId: null,
+                archiveFolderId: null,
                 blotatoApiKey: channel.blotataApiKey,
                 youtubeId: channel.blotataYoutubeId,
                 tiktokId: channel.blotataTiktokId,
@@ -1956,87 +1947,37 @@ const ChannelEditPage = () => {
 
               {channel.blotataEnabled && (
                 <div className="space-y-4">
-                  {/* ID входной папки на сервере */}
-                  <div className="space-y-2">
-                    <label className={`flex items-center gap-2 text-sm font-medium ${
-                      status.status === 'needs_setup' && status.missing.includes('ID входной папки на сервере')
-                        ? 'text-red-300'
-                        : 'text-slate-200'
-                    }`}>
-                      <span>ID входной папки на сервере *</span>
-                      <FieldHelpIcon
-                        fieldKey="channel.driveInputFolderId"
-                        page="channelEdit"
-                        channelContext={{
-                          name: channel.name,
-                          platform: channel.platform,
-                          language: channel.language,
-                          blotataEnabled: channel.blotataEnabled
-                        }}
-                        currentValue={channel.driveInputFolderId}
-                        label="ID входной папки на сервере"
-                      />
+                  {/* Информация о путях к хранилищу (read-only) */}
+                  <div className="space-y-2 rounded-xl border border-slate-700/50 bg-slate-900/30 p-4">
+                    <label className="flex items-center gap-2 text-sm font-medium text-slate-200">
+                      <span>Пути к хранилищу на сервере</span>
                     </label>
-                    <input
-                      type="text"
-                      value={channel.driveInputFolderId || ""}
-                      onChange={(e) =>
-                        setChannel({
-                          ...channel,
-                          driveInputFolderId: e.target.value.trim() || undefined
-                        })
-                      }
-                      placeholder="Например: local_user123_channel456_root"
-                      className={`w-full rounded-xl border bg-slate-950/60 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:ring-2 ${
-                        status.status === 'needs_setup' && status.missing.includes('ID входной папки на сервере')
-                          ? 'border-red-500/50 focus:border-red-500 focus:ring-red-500/40'
-                          : 'border-white/10 focus:border-brand focus:ring-brand/40'
-                      }`}
-                    />
+                    <div className="space-y-2 text-sm">
+                      <div className="flex items-start gap-2">
+                        <span className="text-slate-400 min-w-[120px]">Входная папка:</span>
+                        <code className="flex-1 rounded bg-slate-950/60 px-3 py-2 text-slate-300 break-all">
+                          {user?.email && channel.id && channel.name
+                            ? (() => {
+                                const paths = computeChannelStoragePaths(user.email, channel.id, channel.name);
+                                return `storage/videos/${paths.displayPath}`;
+                              })()
+                            : "storage/videos/{userSlug}/{channelSlug}"}
+                        </code>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <span className="text-slate-400 min-w-[120px]">Архивная папка:</span>
+                        <code className="flex-1 rounded bg-slate-950/60 px-3 py-2 text-slate-300 break-all">
+                          {user?.email && channel.id && channel.name
+                            ? (() => {
+                                const paths = computeChannelStoragePaths(user.email, channel.id, channel.name);
+                                return `storage/videos/${paths.displayPath}/uploaded`;
+                              })()
+                            : "storage/videos/{userSlug}/{channelSlug}/uploaded"}
+                        </code>
+                      </div>
+                    </div>
                     <p className="text-xs text-slate-400">
-                      Папка на сервере, где появляются готовые видео для этого канала. Система отслеживает новые файлы в этой папке.
-                    </p>
-                  </div>
-
-                  {/* ID архивной папки на сервере */}
-                  <div className="space-y-2">
-                    <label className={`flex items-center gap-2 text-sm font-medium ${
-                      status.status === 'needs_setup' && status.missing.includes('ID архивной папки на сервере')
-                        ? 'text-red-300'
-                        : 'text-slate-200'
-                    }`}>
-                      <span>ID архивной папки на сервере *</span>
-                      <FieldHelpIcon
-                        fieldKey="channel.driveArchiveFolderId"
-                        page="channelEdit"
-                        channelContext={{
-                          name: channel.name,
-                          platform: channel.platform,
-                          language: channel.language,
-                          blotataEnabled: channel.blotataEnabled
-                        }}
-                        currentValue={channel.driveArchiveFolderId}
-                        label="ID архивной папки на сервере"
-                      />
-                    </label>
-                    <input
-                      type="text"
-                      value={channel.driveArchiveFolderId || ""}
-                      onChange={(e) =>
-                        setChannel({
-                          ...channel,
-                          driveArchiveFolderId: e.target.value.trim() || undefined
-                        })
-                      }
-                      placeholder="Например: local_user123_channel456_archive"
-                      className={`w-full rounded-xl border bg-slate-950/60 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:ring-2 ${
-                        status.status === 'needs_setup' && status.missing.includes('ID архивной папки на сервере')
-                          ? 'border-red-500/50 focus:border-red-500 focus:ring-red-500/40'
-                          : 'border-white/10 focus:border-brand focus:ring-brand/40'
-                      }`}
-                    />
-                    <p className="text-xs text-slate-400">
-                      Папка на сервере, куда будут перемещаться файлы после успешной публикации.
+                      Папки создаются автоматически при первом использовании. Пути вычисляются на основе email и названия канала.
                     </p>
                   </div>
 
@@ -2435,7 +2376,7 @@ const ChannelEditPage = () => {
                     <button
                       type="button"
                       onClick={handleTestBlottata}
-                      disabled={testingBlottata || !channel.driveInputFolderId || !channel.blotataApiKey}
+                      disabled={testingBlottata || !channel.blotataApiKey}
                       className="flex items-center gap-2 rounded-xl border border-brand/50 bg-brand/10 px-4 py-2.5 text-sm font-medium text-brand transition hover:bg-brand/20 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       {testingBlottata ? (

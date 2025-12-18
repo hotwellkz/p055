@@ -17,16 +17,32 @@ const router = Router();
  */
 router.get("/:userSlug/:channelSlug/:fileName", async (req, res) => {
   const { userSlug, channelSlug, fileName } = req.params;
+  const startTime = Date.now();
+
+  // Детальное логирование входа в роут
+  Logger.info("MediaRoutes: Request received", {
+    userSlug,
+    channelSlug,
+    fileName,
+    url: req.url,
+    method: req.method,
+    headers: {
+      range: req.headers.range,
+      "user-agent": req.headers["user-agent"]
+    }
+  });
 
   try {
     // Проверяем, что userSlug, channelSlug и fileName не содержат опасных символов
     if (!userSlug || !channelSlug || !fileName) {
+      Logger.warn("MediaRoutes: Missing parameters", { userSlug, channelSlug, fileName });
       return res.status(400).json({ error: "Invalid parameters" });
     }
 
     // Проверяем на path traversal
     if (userSlug.includes("..") || channelSlug.includes("..") || fileName.includes("..") || 
         userSlug.includes("/") || channelSlug.includes("/") || fileName.includes("/")) {
+      Logger.warn("MediaRoutes: Path traversal attempt", { userSlug, channelSlug, fileName });
       return res.status(400).json({ error: "Invalid path" });
     }
 
@@ -35,6 +51,17 @@ router.get("/:userSlug/:channelSlug/:fileName", async (req, res) => {
     
     // Формируем безопасный путь: STORAGE_ROOT/userSlug/channelSlug/fileName
     const filePath = path.join(storageRoot, userSlug, channelSlug, fileName);
+
+    // Логируем вычисленный путь
+    Logger.info("MediaRoutes: Path calculation", {
+      userSlug,
+      channelSlug,
+      fileName,
+      storageRoot,
+      filePath,
+      resolvedPath: path.resolve(filePath),
+      resolvedRoot: path.resolve(storageRoot)
+    });
 
     // Проверяем, что файл находится внутри STORAGE_ROOT (защита от path traversal)
     const resolvedPath = path.resolve(filePath);
@@ -46,23 +73,65 @@ router.get("/:userSlug/:channelSlug/:fileName", async (req, res) => {
         channelSlug,
         fileName,
         requestedPath: filePath,
+        resolvedPath,
         storageRoot: resolvedRoot
       });
       return res.status(403).json({ error: "Access denied" });
     }
 
     // Проверяем существование файла
+    let fileExists = false;
     try {
       await fs.access(filePath);
-    } catch {
-      return res.status(404).json({ error: "File not found" });
+      fileExists = true;
+      Logger.info("MediaRoutes: File exists", {
+        userSlug,
+        channelSlug,
+        fileName,
+        filePath,
+        exists: true
+      });
+    } catch (accessError) {
+      fileExists = false;
+      Logger.warn("MediaRoutes: File not found", {
+        userSlug,
+        channelSlug,
+        fileName,
+        filePath,
+        exists: false,
+        error: accessError instanceof Error ? accessError.message : String(accessError),
+        storageRoot,
+        resolvedPath
+      });
+      return res.status(404).json({ 
+        error: "File not found",
+        path: filePath,
+        storageRoot
+      });
     }
 
     // Получаем информацию о файле
     const stats = await fs.stat(filePath);
     if (!stats.isFile()) {
+      Logger.warn("MediaRoutes: Path is not a file", {
+        userSlug,
+        channelSlug,
+        fileName,
+        filePath,
+        isFile: false,
+        isDirectory: stats.isDirectory()
+      });
       return res.status(404).json({ error: "Not a file" });
     }
+
+    Logger.info("MediaRoutes: File stats", {
+      userSlug,
+      channelSlug,
+      fileName,
+      size: stats.size,
+      isFile: stats.isFile(),
+      mtime: stats.mtime.toISOString()
+    });
 
     // Определяем MIME-тип по расширению
     const ext = path.extname(fileName).toLowerCase();
@@ -94,13 +163,16 @@ router.get("/:userSlug/:channelSlug/:fileName", async (req, res) => {
 
       fileStream.pipe(res);
 
-      Logger.info("MediaRoutes: File served (partial)", {
+      Logger.info("MediaRoutes: File served (206 Partial Content)", {
         userSlug,
         channelSlug,
         fileName,
         range: `${start}-${end}`,
         size: chunksize,
-        contentType
+        totalSize: stats.size,
+        contentType,
+        statusCode: 206,
+        duration: Date.now() - startTime
       });
     } else {
       // Полная отдача файла
@@ -112,12 +184,14 @@ router.get("/:userSlug/:channelSlug/:fileName", async (req, res) => {
       const fileStream = createReadStream(filePath);
       fileStream.pipe(res);
 
-      Logger.info("MediaRoutes: File served (full)", {
+      Logger.info("MediaRoutes: File served (200 OK)", {
         userSlug,
         channelSlug,
         fileName,
         size: stats.size,
-        contentType
+        contentType,
+        statusCode: 200,
+        duration: Date.now() - startTime
       });
     }
   } catch (error: any) {
@@ -125,10 +199,15 @@ router.get("/:userSlug/:channelSlug/:fileName", async (req, res) => {
       userSlug,
       channelSlug,
       fileName,
-      error: error instanceof Error ? error.message : String(error)
+      error: error instanceof Error ? error.message : String(error),
+      errorStack: error instanceof Error ? error.stack : undefined,
+      duration: Date.now() - startTime
     });
     if (!res.headersSent) {
-      res.status(500).json({ error: "Internal server error" });
+      res.status(500).json({ 
+        error: "Internal server error",
+        message: error instanceof Error ? error.message : String(error)
+      });
     }
   }
 });

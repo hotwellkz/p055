@@ -1128,12 +1128,8 @@ router.post("/:id/test-blottata", authRequired, async (req, res) => {
     }
 
     // Проверяем настройки
-    if (!channel.driveInputFolderId) {
-      return res.status(400).json({
-        error: "Input folder not configured",
-        message: "Не указана входная папка Google Drive"
-      });
-    }
+    // ПРИМЕЧАНИЕ: driveInputFolderId больше не требуется - пути вычисляются автоматически для локального хранилища
+    // Этот endpoint пока использует Google Drive (processBlottataFile), но может быть обновлен для локального хранилища
 
     if (!channel.blotataApiKey && !process.env.BLOTATA_API_KEY) {
       return res.status(400).json({
@@ -1392,8 +1388,10 @@ function transformChannelForExport(data: any): any {
     uploadNotificationEnabled: data.uploadNotificationEnabled || false,
     uploadNotificationChatId: data.uploadNotificationChatId || null,
     blotataEnabled: data.blotataEnabled || false,
-    driveInputFolderId: data.driveInputFolderId || null,
-    driveArchiveFolderId: data.driveArchiveFolderId || null,
+    // driveInputFolderId и driveArchiveFolderId больше не используются - пути вычисляются автоматически
+    // Оставляем null для обратной совместимости, но не используем эти значения
+    driveInputFolderId: null,
+    driveArchiveFolderId: null,
     blotataYoutubeId: data.blotataYoutubeId || null,
     blotataTiktokId: data.blotataTiktokId || null,
     blotataInstagramId: data.blotataInstagramId || null,
@@ -1611,8 +1609,9 @@ router.post("/import", authRequired, async (req, res) => {
           uploadNotificationEnabled: channelData.uploadNotificationEnabled || false,
           uploadNotificationChatId: channelData.uploadNotificationChatId || null,
           blotataEnabled: channelData.blotataEnabled || false,
-          driveInputFolderId: channelData.driveInputFolderId || null,
-          driveArchiveFolderId: channelData.driveArchiveFolderId || null,
+          // driveInputFolderId и driveArchiveFolderId больше не используются - пути вычисляются автоматически
+          driveInputFolderId: null,
+          driveArchiveFolderId: null,
           blotataYoutubeId: channelData.blotataYoutubeId || null,
           blotataTiktokId: channelData.blotataTiktokId || null,
           blotataInstagramId: channelData.blotataInstagramId || null,

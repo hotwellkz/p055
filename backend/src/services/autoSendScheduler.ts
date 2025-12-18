@@ -804,20 +804,19 @@ export async function processAutoSendTick(): Promise<void> {
                 hasTitle: !!promptResult.title
               });
 
-              // Если включено автоматическое скачивание, планируем задачу
+              // Если включено автоматическое скачивание, планируем задачу сохранения в локальное хранилище
               Logger.info("processAutoSendTick: checking auto-download conditions", {
                 channelId: channel.id,
                 scheduleId: schedule.id,
                 autoDownloadToDriveEnabled: channel.autoDownloadToDriveEnabled,
                 autoDownloadToDriveEnabledType: typeof channel.autoDownloadToDriveEnabled,
-                googleDriveFolderId: channel.googleDriveFolderId || "not set",
-                googleDriveFolderIdType: typeof channel.googleDriveFolderId,
-                autoDownloadDelayMinutes: channel.autoDownloadDelayMinutes
+                autoDownloadDelayMinutes: channel.autoDownloadDelayMinutes,
+                note: "Will save to local storage (storage/videos) if enabled"
               });
 
-              // ДЕТАЛЬНАЯ ПРОВЕРКА УСЛОВИЙ ДЛЯ ДИАГНОСТИКИ
+              // ИСПРАВЛЕНИЕ: Теперь сохраняем в локальное хранилище, поэтому проверяем только autoDownloadToDriveEnabled
+              // (этот флаг теперь означает "автоматически скачивать видео", независимо от места сохранения)
               const hasAutoDownloadEnabled = channel.autoDownloadToDriveEnabled === true;
-              const hasGoogleDriveFolder = !!channel.googleDriveFolderId;
               
               console.log("AUTO_DOWNLOAD_CHECK:", {
                 channelId: channel.id,
@@ -825,12 +824,12 @@ export async function processAutoSendTick(): Promise<void> {
                 autoDownloadToDriveEnabled: channel.autoDownloadToDriveEnabled,
                 autoDownloadToDriveEnabledType: typeof channel.autoDownloadToDriveEnabled,
                 hasAutoDownloadEnabled,
-                googleDriveFolderId: channel.googleDriveFolderId || "NOT_SET",
-                hasGoogleDriveFolder,
-                willSchedule: hasAutoDownloadEnabled && hasGoogleDriveFolder
+                willSchedule: hasAutoDownloadEnabled,
+                storageLocation: "local (storage/videos)",
+                storageRoot: process.env.STORAGE_ROOT || "default (storage/videos)"
               });
 
-              if (hasAutoDownloadEnabled && hasGoogleDriveFolder) {
+              if (hasAutoDownloadEnabled) {
                 // Вычисляем задержку на основе расписания каналов
                 const promptSentAt = new Date();
                 const delayMinutes = await getAutoDownloadDelayMinutesForChannel(
@@ -849,7 +848,7 @@ export async function processAutoSendTick(): Promise<void> {
                   range = "17-24";
                 }
                 
-                Logger.info("processAutoSendTick: scheduling auto-download", {
+                Logger.info("processAutoSendTick: scheduling auto-download to local storage", {
                   channelId: channel.id,
                   scheduleId: schedule.id,
                   messageId: promptResult.messageId,
@@ -857,10 +856,11 @@ export async function processAutoSendTick(): Promise<void> {
                   delayMinutes,
                   range,
                   promptSentAt: promptSentAt.toISOString(),
-                  googleDriveFolderId: channel.googleDriveFolderId,
                   videoTitle: promptResult.title || "not provided",
                   promptLength: promptResult.prompt?.length || 0,
-                  note: "Delay calculated from schedule settings (interval - 1)"
+                  storageLocation: "local (storage/videos)",
+                  storageRoot: process.env.STORAGE_ROOT || "default (storage/videos)",
+                  note: "Delay calculated from schedule settings (interval - 1). Video will be saved to local storage."
                 });
 
                 try {
@@ -914,18 +914,12 @@ export async function processAutoSendTick(): Promise<void> {
                   });
                 }
               } else {
-                Logger.warn("processAutoSendTick: auto-download not scheduled - conditions not met", {
+                Logger.warn("processAutoSendTick: auto-download not scheduled - autoDownloadToDriveEnabled is not enabled", {
                   channelId: channel.id,
                   scheduleId: schedule.id,
                   autoDownloadToDriveEnabled: channel.autoDownloadToDriveEnabled,
                   autoDownloadToDriveEnabledType: typeof channel.autoDownloadToDriveEnabled,
-                  googleDriveFolderId: channel.googleDriveFolderId || "not set",
-                  googleDriveFolderIdType: typeof channel.googleDriveFolderId,
-                  reason: !channel.autoDownloadToDriveEnabled 
-                    ? "autoDownloadToDriveEnabled is not true" 
-                    : !channel.googleDriveFolderId 
-                    ? "googleDriveFolderId is not set" 
-                    : "unknown"
+                  reason: "autoDownloadToDriveEnabled is not true - enable it to automatically download videos to local storage"
                 });
               }
               

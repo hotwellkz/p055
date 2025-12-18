@@ -32,15 +32,8 @@ export function getBlotatoPublishStatus(settings: BlotatoPublishSettings): Blota
   }
 
   // Если автопубликация включена, проверяем обязательные поля
+  // ПРИМЕЧАНИЕ: inputFolderId и archiveFolderId больше не требуются - пути вычисляются автоматически
   const missing: string[] = [];
-
-  if (!inputFolderId || inputFolderId.trim() === '') {
-    missing.push('ID входной папки на сервере');
-  }
-
-  if (!archiveFolderId || archiveFolderId.trim() === '') {
-    missing.push('ID архивной папки на сервере');
-  }
 
   if (!blotatoApiKey || blotatoApiKey.trim() === '') {
     missing.push('Blotato API key');

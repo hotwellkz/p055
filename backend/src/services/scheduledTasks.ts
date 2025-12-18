@@ -1,5 +1,5 @@
 import { Logger } from "../utils/logger";
-import { downloadAndUploadVideoToDrive, type DownloadAndUploadOptions } from "./videoDownloadService";
+import { downloadAndSaveToLocal } from "./videoDownloadService";
 
 interface ScheduledTask {
   id: string;
@@ -17,7 +17,7 @@ interface ScheduledTask {
 const activeTasks = new Map<string, ScheduledTask>();
 
 /**
- * Планирует автоматическое скачивание и загрузку видео в Google Drive
+ * Планирует автоматическое скачивание и сохранение видео в локальное хранилище
  * @param options - Параметры задачи
  * @returns ID задачи
  */
@@ -140,7 +140,7 @@ export function scheduleAutoDownload(options: {
         promptLength: savedTask?.prompt?.length || 0
       });
       
-      // ИДЕМПОТЕНТНОСТЬ: Проверяем, не была ли уже выполнена загрузка для этого telegramMessageId
+      // ИДЕМПОТЕНТНОСТЬ: Проверяем, не было ли уже сохранено видео для этого telegramMessageId
       // Это дополнительная защита на случай, если задача была запланирована дважды
       try {
         const { db, isFirestoreAvailable } = await import("./firebaseAdmin");
@@ -151,27 +151,27 @@ export function scheduleAutoDownload(options: {
             .collection("channels")
             .doc(channelId);
 
-          // Проверяем в videoGenerations
-          const existingGenQuery = await channelRef
-            .collection("videoGenerations")
-            .where("messageId", "==", telegramMessageInfo.messageId)
+          // Проверяем в generatedVideos, не было ли уже сохранено локально
+          const existingVideosQuery = await channelRef
+            .collection("generatedVideos")
+            .where("telegramMessageId", "==", telegramMessageInfo.messageId)
             .limit(1)
             .get();
 
-          if (!existingGenQuery.empty) {
-            const existingGen = existingGenQuery.docs[0].data();
-            if (existingGen.uploadedToDrive === true && existingGen.driveFileId) {
-              console.log("UPLOAD_SKIPPED_ALREADY_UPLOADED:", {
+          if (!existingVideosQuery.empty) {
+            const existingVideo = existingVideosQuery.docs[0].data();
+            if (existingVideo.localFilePath) {
+              console.log("DOWNLOAD_SKIPPED_ALREADY_SAVED:", {
                 taskId,
-                reason: "found_in_videoGenerations_before_download",
-                driveFileId: existingGen.driveFileId
+                reason: "found_in_generatedVideos_before_download",
+                localFilePath: existingVideo.localFilePath
               });
 
-              Logger.warn("scheduleAutoDownload: task skipped - already uploaded", {
+              Logger.warn("scheduleAutoDownload: task skipped - already saved locally", {
                 taskId,
                 channelId,
                 telegramMessageId: telegramMessageInfo.messageId,
-                driveFileId: existingGen.driveFileId
+                localFilePath: existingVideo.localFilePath
               });
 
               activeTasks.delete(taskId);
@@ -180,53 +180,87 @@ export function scheduleAutoDownload(options: {
           }
         }
       } catch (checkError) {
-        Logger.warn("scheduleAutoDownload: failed to check for existing upload, proceeding anyway", {
+        Logger.warn("scheduleAutoDownload: failed to check for existing save, proceeding anyway", {
           taskId,
           error: checkError instanceof Error ? checkError.message : String(checkError)
         });
         // Продолжаем выполнение, если проверка не удалась
       }
 
-      // Вызываем функцию скачивания и загрузки
-      Logger.info("scheduleAutoDownload: calling downloadAndUploadVideoToDrive", {
+      // Логируем начало скачивания
+      Logger.info("scheduleAutoDownload: starting video download to local storage", {
         taskId,
         channelId,
         userId,
         telegramMessageId: telegramMessageInfo.messageId,
         scheduleId,
         timestamp: new Date().toISOString(),
-        willAttemptUpload: true
+        videoTitle: savedTask?.videoTitle || "not provided",
+        storageRoot: process.env.STORAGE_ROOT || "default (storage/videos)"
       });
 
-      const result = await downloadAndUploadVideoToDrive({
+      console.log("AUTO_DOWNLOAD_START:", {
+        taskId,
         channelId,
         userId,
         telegramMessageId: telegramMessageInfo.messageId,
         scheduleId,
+        timestamp: new Date().toISOString(),
+        storageRoot: process.env.STORAGE_ROOT || "default (storage/videos)"
+      });
+
+      // Вызываем функцию скачивания и сохранения в локальное хранилище
+      const result = await downloadAndSaveToLocal({
+        channelId,
+        userId,
+        telegramMessageId: telegramMessageInfo.messageId,
         videoTitle: savedTask?.videoTitle,
         prompt: savedTask?.prompt
       });
 
       if (result.success) {
-        Logger.info("scheduleAutoDownload: task completed successfully", {
+        Logger.info("scheduleAutoDownload: task completed successfully - video saved to local storage", {
           taskId,
           channelId,
           scheduleId,
-          driveFileId: result.driveFileId,
-          driveWebViewLink: result.driveWebViewLink,
-          fileName: result.fileName,
-          uploadedAt: new Date().toISOString()
+          inputPath: result.inputPath,
+          filename: result.filename,
+          channelSlug: result.channelSlug,
+          storage: {
+            userDir: result.storage?.userDir,
+            inputDir: result.storage?.inputDir,
+            filePath: result.storage?.filePath
+          },
+          savedAt: new Date().toISOString()
+        });
+
+        console.log("AUTO_DOWNLOAD_SUCCESS:", {
+          taskId,
+          channelId,
+          scheduleId,
+          inputPath: result.inputPath,
+          filename: result.filename,
+          filePath: result.storage?.filePath,
+          timestamp: new Date().toISOString()
         });
       } else {
-        Logger.error("scheduleAutoDownload: task failed", {
+        Logger.error("scheduleAutoDownload: task failed - video not saved", {
           taskId,
           channelId,
           scheduleId,
           error: result.error,
           errorDetails: {
-            hasDriveFileId: !!result.driveFileId,
-            hasFileName: !!result.fileName
+            hasInputPath: !!result.inputPath,
+            hasFilename: !!result.filename
           }
+        });
+
+        console.error("AUTO_DOWNLOAD_FAILED:", {
+          taskId,
+          channelId,
+          scheduleId,
+          error: result.error,
+          timestamp: new Date().toISOString()
         });
       }
     } catch (error) {
