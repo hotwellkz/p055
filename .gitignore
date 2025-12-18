@@ -36,5 +36,8 @@ dist-ssr
 tmp/
 backend/tmp/
 
-# Backend directory (deployed separately)
-backend/
+# Sensitive files
+firebase_env_line.txt
+firebase_key.txt
+*.key
+*.pem
