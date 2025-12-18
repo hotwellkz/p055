@@ -41,3 +41,11 @@ firebase_env_line.txt
 firebase_key.txt
 *.key
 *.pem
+*.enc
+telegram-session.enc
+app/backend/telegram-session.enc
+app/backend/storage/
+backend/storage/
+*.mp4
+*.mov
+*.avi
